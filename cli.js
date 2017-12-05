@@ -1,0 +1,1 @@
+require('izymodtask').runCmd('izypop3.method');

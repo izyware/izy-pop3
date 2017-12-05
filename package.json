@@ -1,0 +1,40 @@
+{
+  "name": "izy-pop3",
+  "version": "2.1.18",
+  "description": "Node.js pop3 server components for Izyware",
+  "main": "index.js",
+  "dependencies": {
+    "izymodtask": "^1.0.0"
+  },
+  "scripts": {
+    "test": ""
+  },
+  "files": [
+    "README",
+    "cli.js",
+    "g_izypop3.js",
+    "test.js",
+    "modtask",
+    "clientpop3",
+    "serverpop3",
+    "storage",
+    "test"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/izy-pop3/"
+  },
+  "keywords": [
+    "izy",
+    "izyware",
+    "build",
+    "tools",
+    "server",
+    "pop3",
+    "email",
+    "message",
+    "data"
+  ],
+  "author": "http://izyware.com",
+  "license": "ISC"
+}
