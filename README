@@ -1,7 +1,7 @@
-# izy-sync
+# izy-pop3
 Node.js pop3 server components for Izyware
 
-## INSTALLATION
+# INSTALLATION
 
 If you are using npm (the Node.js package manager) always ensure that your npm is up-to-date by running:
 
@@ -13,27 +13,36 @@ Then use:
 npm install izy-pop3;cp -r node_modules/izy-pop3/* .;rm -rf node_modules/izy-pop3;
 ```
 
-## Command Line Usage
+# Command Line Usage
 
 
-### Server
+## Server
 
 ```
 node cli.js method serverpop3 port 1110 password 12345 mimestore.modhandler fake
 node cli.js method serverpop3 port 1110 password 12345 mimestore.modhandler cloud mimestore.dataservice xxx mimestore.xxx ....
 ```
 
-### Client
+### Notes about port forwarding
+
+If you would like to run the server behind a firewall, you can use port forwarding:
+
+```
+ssh -i identity.pem -4 -v -R 1110:localhost:1110 user@your-server.com
+```
+
+
+## Client
 
 ```
 node cli.js method clientpop3 ip localhost port 1110 user user pass 12345 testsuite listandquit
 ```
 
-### Querying the mime store
+## Querying the mime store
 
 If you need to inspect the contents of the mime store you should install the IzyPop3 app via the enterprise accounts dashboard.
 
-### Testing
+## Testing
 
 To make sure that the full stack (client, server, mime store) works, do:
 
@@ -46,14 +55,6 @@ You can test subsystems (mimestore, etc.):
 ```
 node cli.js method test testtype mimestore mimestore.modhandler fake query.limit 2 query.tags abc
 node cli.js method test testtype mimestore mimestore.modhandler cloud mimestore.accesstoken xxxx mimestore.dataservice https://yourcloudlocation mimestore.verbose true mimestore.tablename yyy.xxx query.limit 2 query.tags abc
-```
-
-## Notes about port forwarding
-
-If you would like to run the server behind a firewall, you can use port forwarding:
-
-```
-ssh -i identity.pem -4 -v -R 1110:localhost:1110 user@your-server.com
 ```
 
  ## NOTE
