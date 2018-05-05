@@ -1,12 +1,18 @@
 
 var modtask = function(config) {
-
   modtask.verbose = config.verbose || 0;
-  var groupid = config.groupid || 0;
-
   var tags = modtask.tags;
 
-  var commitmode = config.commitmode;
+  // the only fields that the system cares about is guid and size
+  // you can add other metadata (tagging, etc.) if you need to
+  var allItems = [];
+  var i;
+  for(i=1; i < 100; ++i) {
+    allItems.push({
+      guid: `guid_${i}`,
+      size: (i+1)*10
+    });
+  }
 
   modtask.consumeItem = function(item, cb) {
     modtask.Log('consumeItem');
@@ -35,19 +41,15 @@ var modtask = function(config) {
       config.orderBy = 'desc';
     }
 
-    modtask.Log('query -- tags: ' + tags + ', limit: ' + limit);
-
-    // the only fields that the system cares about is guid and size
+    var totalSize = 0;
     var items = [];
-    var i;
-    for(i=1; i < 10; ++i) {
-      items.push({
-        guid: `guid_${i}`,
-        size: (i+1)*10
-      });
+    for(i=0; i < limit; ++i) {
+      items.push(allItems[i]);
+      totalSize += allItems[i].size;
     }
     cb({
       success: true,
+      totalSize: totalSize,
       count: items.length,
       items: items
     });
@@ -70,6 +72,7 @@ var modtask = function(config) {
     fail( { reason: 'not supported '});
   }
 
+  modtask.success = true;
   return modtask;
 }
 

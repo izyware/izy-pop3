@@ -1,8 +1,10 @@
 
 var modtask = function (config) {
-
   var persistentStore = null;
-  persistentStore = modtask.ldmod('rel:../storage/cloudStore')(config);
+  var storeConfig = config.mimestore || {};
+  if (!storeConfig.modhandler) storeConfig.modhandler = 'fake';
+
+  persistentStore = modtask.ldmod('rel:../mimestore/' + storeConfig.modhandler)(storeConfig);
   if (!persistentStore.success) {
     return modtask.Log('persistentStore failed: ' + persistentStore.reason);
   }

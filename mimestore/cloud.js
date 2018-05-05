@@ -2,6 +2,7 @@
 var modtask = function(config) {
 
   modtask.verbose = config.verbose || 0;
+  if (modtask.verbose) modtask.Log(JSON.stringify(config));
 
   var tableName = config.tablename;
   if (!tableName) {
@@ -57,10 +58,7 @@ var modtask = function(config) {
       config.orderBy = 'desc';
     }
 
-    modtask.Log('query -- tags: ' + tags + ', limit: ' + limit);
-
     var totalSize = 0;
-
     var fields = [`id`, `status`, `groupid`, `messageUTCTimestamp`, `created`, `sourceid`, `guid`, `size` , `payload`];
 
 

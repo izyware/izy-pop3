@@ -174,7 +174,7 @@ modtask.startServer = function(config, cb) {
 	}
 
 	var msgstore = modtask.ldmod('rel:../serverpop3/index').getMessageStoretInstance()(
-		modtask, config, modtask.ldmod('rel:fakeStore')(config));
+		modtask, config, modtask.ldmod('rel:../mimestore/fake')(config));
 
 	// startServer: function(port, server_name, auth, MsgStore, callback);
 	var server = new modtask.ldmod('rel:../serverpop3/index').getServerObjectInstance().startServer(config,

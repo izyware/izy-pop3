@@ -8,25 +8,6 @@ modtask.init = function() {
    modtask.groupidobject = { "transportmodule" : false } ; 
 } 
 modtask.cmdlineverbs = {};
-modtask.help = {};
-modtask.helpStr = `
-Please specifiy arguments. 
-	
-Example:
-
-node cli.js method serverpop3 port 1110 password 12345 storePath ~/emails [orderBy desc] [commitmode true] [limit 500] [tags unprocessed]
-node cli.js method serverpop3 port 1110 password 12345 dataservice https://izyware.com/apps/izyware/ accesstoken xxxx groupid 1 limit 100 commitmode true
-
-node cli.js method clientpop3 ip localhost port 1110 user user pass 12345 testsuite listandquit
-
-node cli.js method querystore dataservice https://izyware.com/apps/izyware/ accesstoken xxxx query 'select id, readBy, channel, channelId, sender, senderId from db.messageextract where body = "body"  limit 1'
-
-node cli.js method test testtype popserver|sessionmanager testtype popserver] [orderBy desc]
-node cli.js method test testtype sessionmanager
-
-`;
-
-modtask.help[modtask.helpStr] = true;
 modtask.commit = false;
 modtask.verbose = false;
 
@@ -44,7 +25,9 @@ modtask.cmdlineverbs.method = function() {
          modtask.ldmod('rel:' + method + '/index')(config);
          break;
       default:
-         modtask.Log(modtask.helpStr);
+         require('fs').readFile('README.md', function(err, data) {
+           modtask.Log(data.toString());
+         });
          break;
    }
 }
