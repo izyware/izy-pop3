@@ -1,6 +1,6 @@
 {
   "name": "izy-pop3",
-  "version": "2.1.19",
+  "version": "2.1.20",
   "description": "Node.js pop3 server components for Izyware",
   "main": "cli.js",
   "dependencies": {
