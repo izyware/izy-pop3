@@ -34,8 +34,49 @@ ssh -i identity.pem -4 -v -R 1110:localhost:1110 user@your-server.com
 
 ## Client
 
+To connect using TLS, pass tls true as the config.
+
 ```
-node cli.js method clientpop3 ip localhost port 1110 user user pass 12345 testsuite listandquit
+node cli.js method clientpop3 ip pop.secureserver.net port 995 user user@domain pass 'password' tls true cmd list
+node cli.js method clientpop3 ip pop.secureserver.net port 995 user user@domain pass 'password' tls true mimestore.modhandler localfs mimestore.path /tmp/izyware/mimestore cmd retr query 1-10
+```
+
+### Server Implementations Workarounds
+Some POP3 server implementation do not strictly stick to the standard definition. To workaround those issues, the client uses a state machine to intelligently perform RETR commands.
+
+### Encoding of the POP3 data
+All the commands and metadata returned by the POP3 server are encoded using the ASCII character set.
+
+It is worth remembering that the payload returned via the RETR command is binary buffer of octets.
+
+This payload is passed on to the mime store handlers and it is up to the mime-store handler to serialize the data properly:
+
+```
+mimeStore.addItems({
+	...,
+	payload: 'Octet Buffer'
+
+```
+
+For example, when using the `localfs` mimestore implemented in nodejs, you may pass the octet buffer directly to writeFile:
+
+```
+fs.writeFile(file, buffer, ...)
+```
+
+(The encoding option is ignored if data is a buffer. writeFile will only need encoding if the buffer is a string).
+
+Since .eml files are serialized octets from a RFC822 encoded message, the approach shown above would work perfectly fine and should generate interoperable stores that would work with standard compliant tools from 3rd party vendors.
+
+### TIP
+If you need to debug over SSL, use ncat --ssl. i.e.
+
+```
+ncat --ssl pop.secureserver.net 995
+USER user
+PASS pass
+LIST
+RETR 1
 ```
 
 ## Querying the mime store
