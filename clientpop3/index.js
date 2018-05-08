@@ -2,10 +2,20 @@
 var modtask = function (config) {
 	var mod = modtask.ldmod('rel:sessionmanager')(config);
 
+	var standardOK = function(client, cb) {
+		var str = client.lastBuffer.toString(); // pop3 servers always use ascii for server response, so this should be ok
+		if (str.toLowerCase().indexOf('+ok') == 0 && str.indexOf('\r\n') > 0) {
+			return cb({success: true});
+		} else {
+			cb({reason: 'Waiting for standard OK, but got ' + str });
+		}
+	}
+
 	var serverInteractions = [
-		[null, '+OK Fenix ready.\r\n'],
-		['USER ' + config.user + '\r\n', '+OK\r\n'],
-		['PASS ' + config.pass + '\r\n', '+OK Logged in. \r\n']
+		// null means just wait for server to write back
+		[null, standardOK],
+		['USER ' + config.user + '\r\n', standardOK],
+		['PASS ' + config.pass + '\r\n', standardOK]
 	];
 
 	switch(config.cmd) {
@@ -30,7 +40,7 @@ var modtask = function (config) {
 		if (!outcome.success) {
 			modtask.Log('Failed: ' + outcome.reason)
 		} else {
-			modtask.Log('runApplicationLayerSocket were successful');
+			modtask.Log('client was successful');
 		}
 	});
 };
@@ -50,28 +60,34 @@ modtask.cmdList = function(serverInteractions) {
 
 modtask.cmdRetr = function(serverInteractions, msgId, config) {
 	var mimeStore = null;
-	var storeConfig = config.mimestore || {};
-	if (!storeConfig.modhandler) storeConfig.modhandler = 'fake';
-	mimeStore = modtask.ldmod('rel:../mimestore/' + storeConfig.modhandler)(storeConfig);
-	if (!mimeStore.success) {
-		return modtask.Log('mimeStore failed: ' + mimeStore.reason);
-	}
+	var CRLF = '\r\n';
+
+	serverInteractions.push([null, function(client, cb) {
+		var storeConfig = config.mimestore || {};
+		if (!storeConfig.modhandler) storeConfig.modhandler = 'fake';
+		mimeStore = modtask.ldmod('rel:../mimestore/' + storeConfig.modhandler)(storeConfig);
+		// mimeStore.success, ..
+		cb(mimeStore);
+	}]);
 
 	var expectedLength = -1;
-	var lastToken = '\r\n\r\n.\r\n';
+	var lastToken = CRLF + '.' + CRLF;
 	var state = 'firstline';
 	var stateData = {
 		firstLineEndIndex: -1
 	}
 	serverInteractions.push(
-		['LIST\r\n', function(client, cb) {
-			var token = '.\r\n';
+		['LIST' + CRLF, function(client, cb) {
+			var token = '.' + CRLF;
 			if (client.lastStr.indexOf(token) == client.lastStr.length - token.length) {
 				var token = msgId + ' ';
 				try {
-					expectedLength = client.lastStr.split(msgId + ' ')[1].split('\r\n')[0]*1;
+					expectedLength = client.lastStr.split(CRLF + msgId + ' ')[1].split(CRLF)[0]*1;
 				} catch(e) {}
-				console.log('expectedLength for msgId ' + msgId + ': ' + expectedLength);
+				i
+				if (isNaN(expectedLength)) {
+					return cb({ reason: 'cannot determine expectedLength for ' + msgId });
+				}
 				return cb({ success: true });
 			}
 			cb( { reason: 'Waiting for ' + token });
@@ -82,14 +98,24 @@ modtask.cmdRetr = function(serverInteractions, msgId, config) {
 		switch (state) {
 			case 'firstline':
 				// we will have +OK \r\n for the first list
-				if (buf.indexOf('\r\n') != -1) {
-					stateData.firstLineEndIndex = buf.indexOf('\r\n') * 1 + 2;
+				if (buf.indexOf(CRLF) != -1) {
+					stateData.firstLineEndIndex = buf.indexOf(CRLF) * 1 + CRLF.length;
 					state = 'belowthreshold';
 					return processState(client, cb);
 				}
 				break;
 			case 'belowthreshold':
-				if (buf.length > 0 && stateData.firstLineEndIndex >= 3 && (buf.length >= expectedLength + stateData.firstLineEndIndex)) {
+				if (buf.length > 0 // data recieved
+					&& stateData.firstLineEndIndex >= 3 // first line recieved already
+					&& buf.length >= expectedLength + CRLF.length*2 // the expected lenght plus at aleasy two CRLF
+				) {
+					state = 'waitforlastline';
+					return processState(client, cb);
+				}
+
+				// Sometimes the server sends the wrong size for the message. If we have been waiting too long and serverTimeoutExpired
+				// At least try to see if the lastline is there?
+				if (client.serverTimeoutExpired) {
 					state = 'waitforlastline';
 					return processState(client, cb);
 				}
@@ -105,6 +131,11 @@ modtask.cmdRetr = function(serverInteractions, msgId, config) {
 				buf = buf.slice(stateData.firstLineEndIndex);
 				buf = buf.slice(0, buf.length - lastToken.length);
 
+				var reasonCode = 0;
+				if (client.serverTimeoutExpired) {
+					reasonCode = 1;
+				}
+				
 				var guid = msgId;
 				mimeStore.addItems([{
 					messageUTCTimestamp: null,
@@ -112,7 +143,10 @@ modtask.cmdRetr = function(serverInteractions, msgId, config) {
 					guid: guid,
 					size: buf.length,
 					// Is this binary? What is the encoding here?
-					payload: buf
+					payload: buf,
+					metadata: {
+						reasonCode: reasonCode
+					}
 				}]);
 				return cb({success: true});
 		}
@@ -120,9 +154,9 @@ modtask.cmdRetr = function(serverInteractions, msgId, config) {
 	}
 
 	serverInteractions.push(
-		['RETR ' + msgId + '\r\n', function(client, cb) {
+		['RETR ' + msgId + CRLF, function(client, cb) {
 			var progress = Math.round(client.lastBuffer.length / (expectedLength+1) * 100);
-			modtask.Log('state=' + state + ', progress=' + progress + '%');
+			modtask.Log('state=' + state + ', progress=' + progress + '% expectedLength=' + expectedLength + ' sofar=' +  client.lastBuffer.length);
 			processState(client, cb);
 		}]);
 }

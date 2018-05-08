@@ -1,28 +1,43 @@
 
 var modtask = function (config) {
 	modtask.config = config;
-
+	config.verbose = config.verbose || modtask.verbose;
+	modtask.verbose = config.verbose;
 	return modtask;
 };
 
-modtask.showCmds = false;
+modtask.verbose = {
+	serverLog: false,
+	clientLog: true,
+	waitTime: false
+};
+
+modtask.clientLog = function(str) {
+	if (modtask.verbose.clientLog) modtask.Log('[CLIENT]: ' + str);
+}
+
+modtask.serverLog = function(str) {
+	if (modtask.verbose.serverLog) modtask.Log('[SERVER]: ' + str);
+}
+
 
 modtask.runApplicationLayerSocket = function(serverInteractions, mainCb, config) {
-	if (!config) config = modtask.config;
-	modtask.verbose = config.verbose;
-	var clientLog = function(str) {
-		modtask.Log('[CLIENT]: ' + str);
+	if (config) {
+		modtask.config  = config;
+	} else {
+		config = modtask.config;
 	}
-	clientLog('attempting to connect ...');
+
+	modtask.clientLog('attempting to connect ...');
 	modtask.createSocketConnection(config, function(client) {
-		clientLog('connected');
+		modtask.clientLog('connected');
 
 		client.on('close', function () {
-			clientLog('Connection closed');
+			modtask.clientLog('Connection closed');
 		});
 
 		modtask.startInteractions(client, serverInteractions, function(outcome) {
-				modtask.Log('initiate kill socket');
+				modtask.clientLog('interactions done, kill socket');
 				client.destroy();
 				mainCb(outcome);
 			});
@@ -35,6 +50,7 @@ modtask.startInteractions = function(client, interactions, mainCb) {
 		client.lastStr = '';
 		client.lastBuffer = Buffer.alloc(0);
 		client.timeoutSinceLastDataFromServer = 0;
+		client.serverTimeoutExpired = false;
 	}
 
 	client.on('data', function(data) {
@@ -46,9 +62,12 @@ modtask.startInteractions = function(client, interactions, mainCb) {
 	var verifyCmd = function(item, cb) {
 		var cmd = item[0], response = item[1];
 		resetClientState();
-		if (modtask.showCmds) modtask.Log('verifyCmd >>>>>>' + JSON.stringify(cmd) + '<<<<<<<< ');
 		if (cmd) {
+			modtask.clientLog(JSON.stringify(cmd));
 			client.write(cmd);
+		} else {
+			// cmd is null which means that we are waiting for the server ...
+			modtask.clientLog('Wait for server');
 		}
 
 		var standardCheck = function(client, cb) {
@@ -61,23 +80,24 @@ modtask.startInteractions = function(client, interactions, mainCb) {
 
 			var postOutcome = function(outcome) {
 				if (outcome.success) {
-					if (modtask.verbose > 4) modtask.Log('Server Said: ' + JSON.stringify(client.lastStr));
-					if (modtask.showCmds) modtask.Log('<<<<<< Verified ' + cmd);
 					return cb({ success: true});
 				}
 				// hmm, wait longer?
 				if (client.timeoutSinceLastDataFromServer < timeout) {
-					if (modtask.verbose > 3) modtask.Log('waitForCompletion, time elapsed: ' + client.timeoutSinceLastDataFromServer + ' . Data Recieved ' + client.lastBuffer.length);
+					if (modtask.verbose.waitTime) modtask.Log('waitForCompletion, time elapsed: ' + client.timeoutSinceLastDataFromServer + ' . Data Recieved ' + client.lastBuffer.length);
 					return setTimeout(function () {
 						client.timeoutSinceLastDataFromServer++;
 						return waitForCompletion();
 					}, 1000);
 				}
+				modtask.serverLog(JSON.stringify(client.lastStr));
+				if (modtask.verbose.waitTime) modtask.Log('timeout exceeded');
 				// well, just fail then
 				cb(outcome);
 			}
 
 			if (typeof(response) == 'function') {
+				client.serverTimeoutExpired = client.timeoutSinceLastDataFromServer + 1 >= timeout;
 				return response(client, postOutcome);
 			} else {
 				standardCheck(client, postOutcome)
@@ -91,7 +111,6 @@ modtask.startInteractions = function(client, interactions, mainCb) {
 	var iterate = function(list, cb, i) {
 		if (i < list.length) {
 			verifyCmd(list[i], function (outcome) {
-				if (modtask.verbose > 3) modtask.Log('Next item to verify: ' + i);
 				if (outcome.success) {
 					iterate(list, cb, i + 1);
 				} else {
@@ -122,16 +141,18 @@ var verify = function(p1, p2) {
 }
 
 modtask.createSocketConnection = function(config, cb) {
+	modtask.clientLog('TLS=' + !!config.tls);
 	if (config.tls) {
 		const tls = require('tls');
 		var client = tls.connect(config.port, config.ip, function() {
-			console.log('client connected', client.authorized ? 'authorized' : 'unauthorized');
+			modtask.clientLog('tls socket connected ' +  (client.authorized ? 'authorized' : 'unauthorized') );
 			cb(client);
 		});
 	} else {
 		var net = require('net');
 		var client = new net.Socket();
 		client.connect(config.port, config.ip, function() {
+			modtask.clientLog('non-tls socket connected');
 			cb(client);
 		});
 	}

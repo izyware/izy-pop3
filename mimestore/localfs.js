@@ -123,16 +123,24 @@ var modtask = function(config) {
   var addItem = function(item) {
     if (config.verbose) console.log('recieved: msgid=' + item.guid + ' size<' + Math.round(item.size/1000 + 1) + 'kb');
     var fname = item.sourceid+ '_' + item.guid;
+
+    var metadata = item.metadata || {};
+    metadata.dupCount = 0;
+    metadata.guid = item.guid;
     if (!storePath) {
       modtask.Log('Not persisting since no path provided for "' + fname + '"');
     } else {
-      fname = storePath + '/' + fname;
       while(fs.existsSync(fname + '.eml')) {
         fname += '.dup';
+        metadata.dupCount++ ;
       }
       fname = fname + '.eml';
+      metadata.fname = fname;
+
+      fname = storePath + '/' + fname;
       modtask.Log('writing ' + fname);
       fs.writeFileSync(fname, item.payload);
+      fs.appendFileSync(storePath + '/' + item.sourceid + '_log.txt', (new Date()).toISOString() + ': ' + JSON.stringify(metadata) + '\r\n');
     }
   }
 
