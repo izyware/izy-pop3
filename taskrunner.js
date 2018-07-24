@@ -66,17 +66,57 @@ seqs.onNewTask = [
         }]);
     },
     function(chain) {
-        var nextObjId = chain.get('nextObjId');
         var outcome = chain.get('outcome');
         if (!outcome.success) return chain([
             ['task.outcome', outcome],
             ['return']
         ]);
-        // todo: store the object in the data storage system (as binary!)
-        // console.log('xxx', outcome.data.toString());
+
+        var doFingerprintHex = function(data) {
+            var crypto = require('crypto')
+              , shasum = crypto.createHash('sha1');
+            shasum.update(data);
+            var result = shasum.digest('hex');
+            return result;
+        }
+
+        var fingerprintHex = doFingerprintHex(outcome.data);
+        chain.set('fingerprintHex', fingerprintHex);
+        chain.set('datasize', outcome.data.length);
+        chain(['fsstorage.save', {
+            config: config.storage, // path, etc.
+            data: outcome.data,
+            fingerprintHex: fingerprintHex
+        }]);
+    },
+    function(chain) {
+        var outcome = chain.get('outcome');
+        if (!outcome.success) return chain([
+            ['task.outcome', outcome],
+            ['return']
+        ]);
+
+        var fingerprintHex = chain.get('fingerprintHex');
+        chain(['task.trackdata', {
+            dataIdHex: (chain.get('nextObjId')*1).toString(16),
+            fingerprintHex: fingerprintHex,
+            uri: outcome.data.uri,
+            size: chain.get('datasize'),
+            datatype: 'email',
+            encryptionkey: null
+        }]);
+    },
+    function (chain) {
+        var outcome = chain.get('outcome');
+        if (!outcome.success) return chain([
+            ['task.outcome', outcome],
+            ['return']
+        ]);
+
+        var nextObjId = chain.get('nextObjId');
         chain([
             ['task.setstate', nextObjId],
-            ['task.outcome', { success: true, reason: 'stored 1 item with id: ' + nextObjId + ' with size: ' + outcome.data.length }],
+            ['task.outcome', { success: true, reason: 'stored 1 item with id: ' + nextObjId + ' with size: ' + chain.get('datasize') }],
             ['return']
         ]);
     }
@@ -92,13 +132,11 @@ require('izy-proxy').newChain([
     ['returnOnFail'],
     ['taskrunner.authenticate', config.authenticate],
     ['returnOnFail'],
+    ['chain.importProcessor', 'apps/storage/fs:chain'],
+    ['returnOnFail'],
     ['taskrunner.onNewTask', seqs.onNewTask],
     ['taskrunner.setRuntimeID', config.izyware_runtime_id],
-    ['taskrunner.config', {
-        loopMode: true,
-        readOnlyMode: false,
-        delay: 5000
-    }],
+    ['taskrunner.config', config.runner],
     ['taskrunner.listen'],
     ['returnOnFail']
 ], console.log);
