@@ -4,7 +4,8 @@
   "description": "Node.js pop3 server components for Izyware",
   "main": "cli.js",
   "dependencies": {
-    "izymodtask": "^1.0.0"
+    "izy-proxy": "^1.0.41",
+    "izymodtask": "^1.0.18"
   },
   "scripts": {
     "test": ""

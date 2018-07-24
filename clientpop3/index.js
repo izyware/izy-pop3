@@ -1,10 +1,24 @@
 
-var modtask = function (config) {
+var sampleListResponse = '+OK \r\n1 101\r\n2 102\r\n.\r\n'
+var CRLF = '\r\n';
+
+var modtask = function (config, _mainCb) {
+	var testMode = false;
+	var finalOutcome = {};
+	if (!_mainCb) {
+		_mainCb = function(outcome) {
+			if (!outcome.success) {
+				modtask.Log('Failed: ' + outcome.reason)
+			} else {
+				modtask.Log('client was successful');
+			}
+		};
+	}
 	var mod = modtask.ldmod('rel:sessionmanager')(config);
 
 	var standardOK = function(client, cb) {
 		var str = client.lastBuffer.toString(); // pop3 servers always use ascii for server response, so this should be ok
-		if (str.toLowerCase().indexOf('+ok') == 0 && str.indexOf('\r\n') > 0) {
+		if (modtask.detectStandardOK(str)) {
 			return cb({success: true});
 		} else {
 			cb({reason: 'Waiting for standard OK, but got ' + str });
@@ -14,62 +28,90 @@ var modtask = function (config) {
 	var serverInteractions = [
 		// null means just wait for server to write back
 		[null, standardOK],
-		['USER ' + config.user + '\r\n', standardOK],
-		['PASS ' + config.pass + '\r\n', standardOK]
+		['USER ' + config.user + CRLF, standardOK],
+		['PASS ' + config.pass + CRLF, standardOK]
 	];
 
 	switch(config.cmd) {
 		case 'list':
-			modtask.cmdList(serverInteractions);
+			if (testMode) {
+				modtask.parseListCommand(sampleListResponse, finalOutcome);
+				return _mainCb(finalOutcome);
+			}
+			modtask.cmdList(serverInteractions, finalOutcome);
 			break;
 		case 'retr':
-			var range = config.query.split('-');
-			if (range.length != 2)
-				return modtask.Log('Please specifiy the query range start-end');
-			var i;
-			for(i=range[0]*1; i <= range[1]*1; ++i) {
-				modtask.cmdRetr(serverInteractions, i, config);
+			if (!config.query) {
+				return _mainCb({ reason: 'please specify query' });
 			}
+			var id = config.query.id;
+			if (!id) {
+				return _mainCb({ reason: 'please specify query.id with the id of the item to get' });
+			}
+
+			if (testMode) {
+				finalOutcome.success = true;
+				finalOutcome.data = Buffer.from('sample payload for ' + id, 'ascii')
+				return _mainCb(finalOutcome);
+			}
+			modtask.cmdRetr(serverInteractions, id, config, finalOutcome);
 			break;
 		default:
 	}
 
-	serverInteractions.push(['QUIT\r\n', '+OK']);
-
+	serverInteractions.push(['QUIT' + CRLF, '+OK']);
 	mod.runApplicationLayerSocket(serverInteractions, function(outcome) {
-		if (!outcome.success) {
-			modtask.Log('Failed: ' + outcome.reason)
-		} else {
-			modtask.Log('client was successful');
-		}
+		if (!outcome.success) return _mainCb(outcome);
+		_mainCb(finalOutcome);
 	});
 };
 
-modtask.cmdList = function(serverInteractions) {
+modtask.detectStandardOK = function(str) {
+	return (str.toLowerCase().indexOf('+ok') == 0 && str.indexOf(CRLF) > 0);
+}
+
+modtask.parseListCommand = function(str, outcome) {
+	var outcome = outcome || {};
+	if (!modtask.detectStandardOK(str)) {
+		outcome.reason = 'expected OK at the begining of command but got ' + str;
+		return;
+	}
+	var items = str.split(CRLF);
+	outcome.success = true;
+	outcome.data = {
+		items: [],
+		idIndexHash: {}
+	};
+	var i;
+	var item ;
+	for(i=1; i < items.length; ++i) {
+		item = items[i];
+		if (item.indexOf(' ') >= 0) {
+			item = item.split(' ');
+			var obj = {id: item[0], size: item[1] };
+			outcome.data.idIndexHash[obj.id] = outcome.data.items.length;
+			outcome.data.items.push(obj);
+		}
+	}
+}
+
+modtask.cmdList = function(serverInteractions, finalOutcome) {
 	serverInteractions.push(
-		['LIST\r\n', function(client, cb) {
-			var token = '.\r\n';
+		['LIST' + CRLF, function(client, cb) {
+			var token = '.' + CRLF;
 			if (client.lastStr.indexOf(token) == client.lastStr.length - token.length) {
-				console.log(client.lastStr);
+				delete finalOutcome.reason;
+				modtask.parseListCommand(client.lastStr, finalOutcome);
 				return cb({ success: true });
 			}
+			finalOutcome.success = false;
+			finalOutcome.reason =  'Waiting for ' + token;
 			cb( { reason: 'Waiting for ' + token });
 		}]
 	);
 }
 
-modtask.cmdRetr = function(serverInteractions, msgId, config) {
-	var mimeStore = null;
-	var CRLF = '\r\n';
-
-	serverInteractions.push([null, function(client, cb) {
-		var storeConfig = config.mimestore || {};
-		if (!storeConfig.modhandler) storeConfig.modhandler = 'fake';
-		mimeStore = modtask.ldmod('rel:../mimestore/' + storeConfig.modhandler)(storeConfig);
-		// mimeStore.success, ..
-		cb(mimeStore);
-	}]);
-
+modtask.cmdRetr = function(serverInteractions, msgId, config, finalOutcome) {
 	var expectedLength = -1;
 	var lastToken = CRLF + '.' + CRLF;
 	var state = 'firstline';
@@ -130,24 +172,12 @@ modtask.cmdRetr = function(serverInteractions, msgId, config) {
 			case 'complete':
 				buf = buf.slice(stateData.firstLineEndIndex);
 				buf = buf.slice(0, buf.length - lastToken.length);
-
-				var reasonCode = 0;
 				if (client.serverTimeoutExpired) {
-					reasonCode = 1;
+					finalOutcome.reason = 'serverTimeoutExpired';
+				} else {
+					finalOutcome.success = true;
+					finalOutcome.data = buf;
 				}
-				
-				var guid = msgId;
-				mimeStore.addItems([{
-					messageUTCTimestamp: null,
-					sourceid: config.user,
-					guid: guid,
-					size: buf.length,
-					// Is this binary? What is the encoding here?
-					payload: buf,
-					metadata: {
-						reasonCode: reasonCode
-					}
-				}]);
 				return cb({success: true});
 		}
 		cb( { reason: 'State is ' + state });
