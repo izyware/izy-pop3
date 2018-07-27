@@ -3,7 +3,14 @@ var sampleListResponse = '+OK \r\n1 101\r\n2 102\r\n.\r\n'
 var CRLF = '\r\n';
 
 var modtask = function (config, _mainCb) {
-	var testMode = false;
+	var fakeDataSourceIOMode = !!config.fakeDataSourceIOMode;
+	if (fakeDataSourceIOMode) {
+		sampleListResponse = '+OK ' + CRLF;
+		var i;
+		for(i=0; i < 1000; ++i) {
+			sampleListResponse += i + ' ' + i + CRLF;
+		}
+	}
 	var finalOutcome = {};
 	if (!_mainCb) {
 		_mainCb = function(outcome) {
@@ -34,7 +41,7 @@ var modtask = function (config, _mainCb) {
 
 	switch(config.cmd) {
 		case 'list':
-			if (testMode) {
+			if (fakeDataSourceIOMode) {
 				modtask.parseListCommand(sampleListResponse, finalOutcome);
 				return _mainCb(finalOutcome);
 			}
@@ -49,7 +56,7 @@ var modtask = function (config, _mainCb) {
 				return _mainCb({ reason: 'please specify query.id with the id of the item to get' });
 			}
 
-			if (testMode) {
+			if (fakeDataSourceIOMode) {
 				finalOutcome.success = true;
 				finalOutcome.data = Buffer.from('sample payload for ' + id, 'ascii')
 				return _mainCb(finalOutcome);
